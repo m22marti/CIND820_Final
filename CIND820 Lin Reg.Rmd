@@ -1,0 +1,278 @@
+---
+title: "CIND820 Capstone"
+author: "Marlene Martins"
+date: "March 29, 2021"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+
+install.packages('FNN') 
+install.packages('RCurl') 
+install.packages('MASS') 
+install.packages('leaps') 
+library(MASS) # stepwise regression 
+library(leaps) # all subsets regression
+
+Dataset: http://vincentarelbundock.github.io/ Rdatasets/csv/Ecdat/Computers.csv
+
+
+
+```{r step1}
+library(MASS) # stepwise regression 
+library(leaps) # all subsets regression
+library(RCurl)
+
+
+#c_prices <- read.csv(file="http://vincentarelbundock.github.io/Rdatasets/csv/Ecdat/Computers.csv")
+covid_dat <- read.csv(file="Q:/BI Team/Credit Card Reporting/Projects/ADH0820/Data/COVID_NBH_Summaryo.csv")
+
+head(covid_dat)
+summary(covid_dat)
+str(covid_dat)
+
+#solution: doesn't work on my version
+#u <- getURL("http://vincentarelbundock.github.io/Rdatasets/csv/Ecdat/Computers.csv") 
+#c_prices <- read.csv(text = u)
+
+
+
+```
+
+
+1. Create a multiple linear regression model to predict infection rate.
+(a) Split the dataset to 70% of training and 30% of test sets. 
+
+
+
+
+```{r step2}
+
+#The floor function rounds a numeric input down to the next lower integer
+rn_train <- sample(nrow(covid_dat), floor(nrow(covid_dat)*0.7)) 
+train <- covid_dat[rn_train,] 
+test <- covid_dat[-rn_train,]
+
+str(covid_dat)
+
+```
+
+(b) Create the multiple regression model on the train set using ram, screen, speed, hd and ads as independent variables.
+
+We will train our model on the training set and do the prediction on the test set
+
+```{r step3}
+
+model_mlr<- lm(INFECTION_RATE~P_AGE_40_to_64+P_VM_Yes+P_EDU_HS_Lower+P_HH_5_Persons+P_OCC_Ess_Yes, data=train)
+model_mlr
+
+
+```
+
+(c) Apply predict() function on the test set. 
+
+```{r step4}
+
+prediction <- predict(model_mlr, interval="prediction", newdata =test)
+
+head(prediction)
+summary(prediction)
+```
+(d) Calculate the errors (prediction price – test price) in predictions and show the histogram of errors. 
+
+Get difference between prediction and test 
+```{r step5}
+
+#this option for prediction "fit" model? 
+#get the errors
+#this "fit" is a column, the fitted value/model.  lower/upper are intervals upper/lower limit, we want to see model prediction.  we want to compare the fitted value to the test
+summary(prediction)
+errors <- prediction[,"fit"] - test$INFECTION_RATE 
+hist(errors)
+
+# The Error Histogram view can help you to understand how error is distributed
+#histogram is left scewed, 
+
+
+errors2 <- prediction - test$price
+
+
+```
+(e) Compute the root mean squared error.
+
+need to get the error and then square it and get the summation and divide by number of observations in test set
+comparing the actual price to the predicted price
+
+```{r step6}
+
+rmse <- sqrt(sum((prediction[,"fit"]-test$INFECTION_RATE)^2)/nrow(test)) 
+rmse
+
+#both pred(25) and rmse values are better for multiple linear regression
+```
+
+
+##2. Apply forward selection and backward elimination algorithms to the dataset.
+
+Forward selection:
+
+we end up using all variables
+
+```{r step7}
+
+#Forward SElection
+
+# for all variables
+
+
+full <- lm(INFECTION_RATE~P_AGE_40_to_64+P_VM_Yes+P_EDU_HS_Lower+P_HH_5_Persons+P_OCC_Ess_Yes,data=covid_dat) 
+
+# this creates for only one independent value at a time
+null <- lm(INFECTION_RATE~1,data=covid_dat) 
+
+#stepAIC 
+stepF <- stepAIC(null, scope=list(lower=null, upper=full), direction= "forward", trace=TRUE) 
+
+summary(stepF)
+
+```
+
+2. Apply backward elimination algorithms to the dataset.
+
+
+```{r step8}
+#backward elimination
+
+full <- lm(INFECTION_RATE~P_AGE_40_to_64+P_VM_Yes+P_EDU_HS_Lower+P_HH_5_Persons+P_OCC_Ess_Yes,data=covid_dat) 
+
+stepB <- stepAIC(full, direction= "backward", trace=TRUE) 
+
+summary(stepB) 
+
+
+
+
+```
+
+3. Apply regsubsets() to see the best combination of the attributes.  
+
+In the output, * denotes the variables included to the subset. For example, the best combination of 4 attributes is: ram, speed, screen and trend, and the best combination of 5 attributes is: ram, hd, speed, screen and trend
+
+This algorithm uses AIC at the back.  putting all the combinatons and seeing which one has lower AIC to be better.  
+part of a package.  
+```{r step9}
+
+# specify the model that is being used
+subsets<-regsubsets(INFECTION_RATE~P_AGE_40_to_64+P_VM_Yes+P_EDU_HS_Lower+P_HH_5_Persons+P_OCC_Ess_Yes, data=covid_dat, nbest=1) 
+
+sub.sum <- summary(subsets) 
+
+as.data.frame(sub.sum$outmat) 
+
+
+```
+
+Random Forest 
+
+
+
+
+
+```{r step10}
+
+library(rsample)
+library(randomForest)
+#library(ranger)
+#library(caret)
+#library(h2o)
+
+#set random seed to make results reproducible
+
+set.seed(17)
+
+#calculate the size of each of tre data sets;
+data_set_size <- floor(nrow(covid_dat)/2)
+
+#generate a random sample of "data_set_size" indexes
+indexes <- sample(1:nrow(covid_dat), size = data_set_size)
+
+#assign the data to the correct sets
+training = covid_dat[indexes,]
+validation1 = covid_dat[-indexes,]
+
+
+# Create training (70%) and test (30%) sets for the AmesHousing::make_ames() data.
+# Use set.seed for reproducibility
+
+set.seed(123)
+data_split <- initial_split(covid_dat, prop = .7)
+data_train <- training(data_split)
+data_test  <- testing(data_split)
+
+
+```
+
+
+```{r step11}
+
+#import the package
+library(randomForest)
+
+class(covid_dat$INFECTION_RATE2)
+#perform training'
+
+INFECTION_RATE3<-factor(data_train$INFECTION_RATE2)
+class(INFECTION_RATE3)
+
+rf_infect_rate <- randomForest(INFECTION_RATE ~P_AGE_40_to_64+P_VM_Yes+P_EDU_HS_Lower+P_HH_5_Persons+P_OCC_Ess_Yes, data=train, ntree=27)
+
+print(rf_infect_rate)
+
+
+```
+
+```{r step12}
+#Run on testing
+library(MASS)
+library(ModelMetrics)
+
+res = lapply(c(111,222),function(i){
+  set.seed(i)
+
+fit = randomForest(INFECTION_RATE ~P_AGE_40_to_64+P_VM_Yes+P_EDU_HS_Lower+P_HH_5_Persons+P_OCC_Ess_Yes, data=train, ntree=27)
+  
+pred_values = predict(fit,test)
+actual_values = test$INFECTION_RATE
+
+#rmse(pred_values,actual_values)
+
+data.frame(seed=i,
+      metrics_rmse = rmse(pred_values,actual_values),
+      cal_rmse=mean((pred_values-actual_values)^2)^0.5
+     )
+})
+res=do.call(rbind,res)
+head(res)
+
+
+```
+
+```{r lab13}
+
+# Output to be present as PNG file 
+png(file = "Q:/BI Team/Credit Card Reporting/Projects/ADH0820/Charts/randomForestRegression.png")
+  
+# Plot the error vs the number of trees graph
+plot(rf_infect_rate)
+
+
+# Saving the file
+dev.off()
+
+varImpPlot(rf_infect_rate)
+
+
+
+``` 
